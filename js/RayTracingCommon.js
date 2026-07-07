@@ -3052,10 +3052,25 @@ float BoundingBoxIntersect( vec3 minCorner, vec3 maxCorner, vec3 rayOrigin, vec3
 
 
 THREE.ShaderChunk[ 'raytracing_bvhTriangle_intersect' ] = `
+// https://github.com/Jojendersie/gpugi/blob/5d18526c864bbf09baca02bfab6bcec97b7e1210/gpugi/shader/intersectiontests.glsl#L63
+float BVH_TriangleIntersect(in vec3 p0, in vec3 p1, in vec3 p2, vec3 rayOrigin, vec3 rayDirection, out float u, out float v ) 
+{
+	vec3 e0 = p1 - p0, e1 = p0 - p2;
+	vec3 N = cross(e1, e0);
+	float det = dot(N, rayDirection);
+	vec3 e2 = (1.0 / det) * (p0 - rayOrigin);
+	vec3 i = cross(rayDirection, e2);
+	vec3 b = vec3(0.0, dot(i, e1), dot(i, e0));
+	b.x = 1.0 - (b.y + b.z);
+	u = b.y; v = b.z;
+	float t = dot(N, e2);
+	return det < 0.0 && t > 0.0 && all(greaterThanEqual(b, vec3(0))) ? t : INFINITY;
+}
+/* 
 //-------------------------------------------------------------------------------------------------------------------
 float BVH_TriangleIntersect( vec3 v0, vec3 v1, vec3 v2, vec3 rayOrigin, vec3 rayDirection, out float u, out float v )
 //-------------------------------------------------------------------------------------------------------------------
-{
+{	// the usual Möller–Trumbore triangle intersection routine
 	vec3 edge1 = v1 - v0;
 	vec3 edge2 = v2 - v0;
 	vec3 pvec = cross(rayDirection, edge2);
@@ -3066,12 +3081,24 @@ float BVH_TriangleIntersect( vec3 v0, vec3 v1, vec3 v2, vec3 rayOrigin, vec3 ray
 	v = dot(rayDirection, qvec) * det;
 	float t = dot(edge2, qvec) * det;
 	return (det < 0.0 || t <= 0.0 || u < 0.0 || u > 1.0 || v < 0.0 || u + v > 1.0) ? INFINITY : t;
-}
+} 
+*/
 
 /* //-------------------------------------------------------------------------------------------------------------------
 float BVH_TriangleIntersect( vec3 v0, vec3 v1, vec3 v2, vec3 rayOrigin, vec3 rayDirection, out float u, out float v )
 //-------------------------------------------------------------------------------------------------------------------
-{
+{	// NOTE: if this triangle intersection routine is used rather than the usual Möller–Trumbore one above,
+	// you must go inside each fragment shader where the U,V, and W components are read from the triangle
+	// data texture, and then you have to change the ordering from W U V, to U V W
+	// For example:
+	// hitNormal = (triangleW * vec3(vd2.yzw)) + (triangleU * vec3(vd3.xyz)) + (triangleV * vec3(vd3.w, vd4.xy));
+	// becomes
+	// hitNormal = (triangleU * vec3(vd2.yzw)) + (triangleV * vec3(vd3.xyz)) + (triangleW * vec3(vd3.w, vd4.xy));
+	// and
+	// hitUV = triangleW * vec2(vd4.zw) + triangleU * vec2(vd5.xy) + triangleV * vec2(vd5.zw);
+	// becomes
+	// hitUV = triangleU * vec2(vd4.zw) + triangleV * vec2(vd5.xy) + triangleW * vec2(vd5.zw);
+
 	//Inside-Outside Test	
 	vec3 n = cross(v1 - v0, v2 - v0);
 	float nDotDir = 1.0 / dot(n, rayDirection);
@@ -3106,6 +3133,20 @@ float BVH_TriangleIntersect( vec3 v0, vec3 v1, vec3 v2, vec3 rayOrigin, vec3 ray
 `;
 
 THREE.ShaderChunk[ 'raytracing_bvhDoubleSidedTriangle_intersect' ] = `
+// https://github.com/Jojendersie/gpugi/blob/5d18526c864bbf09baca02bfab6bcec97b7e1210/gpugi/shader/intersectiontests.glsl#L63
+float BVH_DoubleSidedTriangleIntersect(in vec3 p0, in vec3 p1, in vec3 p2, vec3 rayOrigin, vec3 rayDirection, out float u, out float v ) 
+{
+	vec3 e0 = p1 - p0, e1 = p0 - p2;
+	vec3 N = cross(e1, e0);
+	vec3 e2 = (1.0 / dot(N, rayDirection)) * (p0 - rayOrigin);
+	vec3 i = cross(rayDirection, e2);
+	vec3 b = vec3(0.0, dot(i, e1), dot(i, e0));
+	b.x = 1.0 - (b.y + b.z);
+	u = b.y; v = b.z;
+	float t = dot(N, e2);
+	return t > 0.0 && all(greaterThanEqual(b, vec3(0))) ? t : INFINITY;
+}
+/* 
 //------------------------------------------------------------------------------------------------------------------------------
 float BVH_DoubleSidedTriangleIntersect( vec3 v0, vec3 v1, vec3 v2, vec3 rayOrigin, vec3 rayDirection, out float u, out float v )
 //------------------------------------------------------------------------------------------------------------------------------
@@ -3120,7 +3161,8 @@ float BVH_DoubleSidedTriangleIntersect( vec3 v0, vec3 v1, vec3 v2, vec3 rayOrigi
 	v = dot(rayDirection, qvec) * det; 
 	float t = dot(edge2, qvec) * det;
 	return (t <= 0.0 || u < 0.0 || u > 1.0 || v < 0.0 || u + v > 1.0) ? INFINITY : t;
-}
+} 
+*/
 `;
 
 
